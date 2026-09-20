@@ -1,0 +1,10 @@
+node_modules/
+plans/
+.env
+*.log
+.venv/
+__pycache__/
+*.egg-info/
+build/
+dist/
+.build-venv/

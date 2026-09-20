@@ -1,0 +1,16 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "archpilot"
+version = "0.1.0"
+description = "A conversational Arch Linux installation planner powered by Codex"
+requires-python = ">=3.11"
+dependencies = ["openai-codex==0.155.1"]
+
+[project.scripts]
+archpilot = "archpilot.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["archpilot*"]

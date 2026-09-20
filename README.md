@@ -1,0 +1,137 @@
+# Archpilot
+
+A Python terminal companion for planning an Arch Linux installation from the live environment. Powered by the official `openai-codex` SDK.
+
+**Milestone 1: hardware discovery → conversation → reviewable draft.** There is no partitioning, formatting, package installation or reboot executor. Plans are intent documents, not executable installation recipes.
+
+## Try it now
+
+Python 3.11+ is required. From this checkout:
+
+```sh
+python -m venv .venv
+.venv/bin/python -m pip install -e .
+.venv/bin/archpilot demo
+```
+
+The demo uses fictional hardware and local commands, without credentials or API calls. You can also run it without installing dependencies: `python -m archpilot demo`.
+
+```text
+/disk /dev/nvme0n1
+/set desktop kde
+/set encryption yes
+/set hostname archbox
+/set timezone Europe/Copenhagen
+/plan
+/save plan.json
+/quit
+```
+
+The fixture intentionally includes an existing NTFS partition so the proposed erase is visible, plus an excluded live USB.
+
+## Installation and authentication in the Arch live environment
+
+First establish networking and correct system time, following the [Arch installation guide](https://wiki.archlinux.org/title/Installation_guide). Have this checkout available in the live environment. If Python's venv/pip support is missing, provision it in your live image before running the setup commands above. For the generated bootstrap and release instructions, see below. No custom ISO is provided.
+
+The pinned Python SDK installs its matching Codex runtime automatically. **No Node.js or separate global Codex install is needed.** The assistant calls that runtime through the SDK.
+
+```sh
+.venv/bin/archpilot login
+```
+
+Open the displayed verification URL on a phone or another computer and enter the code. Device-code login is beta and may require enabling it in your ChatGPT security settings or workspace permissions. Then:
+
+```sh
+.venv/bin/archpilot status
+.venv/bin/archpilot chat
+```
+
+Use the same OS user and environment for login and chat. The SDK uses Codex's normal credential store. On the live ISO, keep this state in the live environment; don't copy it into the target installation. Sign out with `archpilot logout` (or use the `.venv/bin/` prefix).
+
+An API key is an alternative, billed through your API account:
+
+```sh
+.venv/bin/archpilot login --api-key
+```
+
+The key is entered through a hidden terminal prompt, not in the conversation or command arguments. Do not supply passwords or encryption passphrases to the chat. See [official authentication guidance](https://learn.chatgpt.com/docs/auth) and [SDK documentation](https://learn.chatgpt.com/docs/codex-sdk).
+
+## Live conversation
+
+```text
+arch> I want KDE and an encrypted root filesystem for a development laptop.
+arch> Use Europe/Copenhagen and call it archbox.
+arch> /disks
+arch> /disk /dev/nvme0n1
+arch> /plan
+```
+
+The model can discuss choices and update four validated preferences: desktop, encryption, hostname and timezone. It cannot choose the disk through its response schema. Disk selection always uses `/disk` with an exact path. `/set` also works in live mode without an API call.
+
+`archpilot inventory` prints local discovery JSON without starting Codex. `chat --model MODEL` overrides the configured model. Discovery uses fixed `lsblk` and `lspci` argument lists, never model-generated shell text. Missing probes are reported. Model prompts contain hardware inventory and preferences; disk serials are removed from prompts, but retained in local review/export.
+
+## Scope and limitations
+
+- First profile: x86_64, UEFI, whole-disk installation intent. Dual boot and partition preservation are future work.
+- Mounted devices (including nested mapped devices), read-only devices and USB/removable disks are excluded from target selection. This intentionally excludes USB installation targets too.
+- Discovery is a snapshot. A future executor must rediscover and compare disk identity immediately before any write and obtain explicit erase authorization.
+- Plans always remain `draft` and `executable: false`. Partition sizes, bootloader, packages, users, locale and driver selection remain future implementation work. An empty pending-preferences list does not make a draft installable.
+- Codex threads request a read-only sandbox and deny all escalation approvals. They receive planning-only instructions. Runtime capabilities and host Codex configuration still matter; this is a development prototype for a disposable VM, not a hardened root agent.
+- No automatic retry of model calls, cross-process chat resumption, installation execution or recovery engine yet. `/save` preserves the draft, not an executable checkpoint.
+- Draft export refuses existing files and symlinks. Export contains disk identifiers; keep it local.
+
+## Development
+
+```sh
+.venv/bin/python -m unittest discover -s tests -v
+.venv/bin/python -m archpilot --help
+```
+
+Modules:
+
+- `inventory.py`: fixed read-only probes and disk exclusions.
+- `planner.py`: preference validation, draft construction and exclusive export.
+- `agent.py`: Codex thread and schema-constrained responses.
+- `cli.py`: terminal conversation, local commands and SDK authentication.
+
+The SDK version is pinned in `pyproject.toml`; it pins its own runtime dependency. Offline tests cover disk exclusions, malformed model output and export behavior. Authenticated model calls and booting an actual Arch ISO require separate integration testing.
+
+## Bootstrap from the Arch ISO
+
+Once release `v0.1.0` is published to **codella/archpilot**, connect to the internet and run:
+
+```sh
+curl -fsSL https://github.com/codella/archpilot/releases/download/v0.1.0/install.sh | bash
+archpilot login
+archpilot chat
+```
+
+Or download with wget and run after the download succeeds:
+
+```sh
+wget -O /tmp/archpilot-install.sh https://github.com/codella/archpilot/releases/download/v0.1.0/install.sh && bash /tmp/archpilot-install.sh
+```
+
+These URLs require a published public GitHub release; local builds do not publish it. The script installs the application, then prints login/chat commands. It does not read interactive input from the download pipe or initiate installation of Arch Linux.
+
+The root defaults are `/opt/archpilot/releases/` and `/usr/local/bin/archpilot`. For regular users the defaults are `~/.local/share/archpilot/releases/` (respecting `XDG_DATA_HOME`) and `~/.local/bin/archpilot`; the script prints absolute commands so it also works before updating PATH. Python 3.11+ is required. Missing Python/venv prerequisites are provisioned with `pacman -Syu` **only when running as root inside `/run/archiso`**. This updates the live environment and requires sufficient RAM/overlay space. Elsewhere, install prerequisites yourself.
+
+Every install creates a fresh virtual environment and checks the application launcher before switching the command symlink. Failed downloads, checksum mismatches and failed dependency installation leave an existing launcher unchanged. Old releases are retained. The application wheel checksum is embedded in the installer; dependencies are fetched from the configured Python package index. The bootstrap is not an offline or completely reproducible dependency bundle. Downloading and executing the script trusts the GitHub repository and release publisher.
+
+## Build and publish a release
+
+```sh
+.venv/bin/python scripts/build_release.py \
+  --base-url https://github.com/codella/archpilot/releases/download/v0.1.0
+```
+
+Produces `dist/v0.1.0/install.sh`, the wheel, and `SHA256SUMS`. The wheel checksum is embedded in `install.sh`. Do not edit or replace the wheel afterward without regenerating the installer.
+
+The GitHub Actions release workflow runs tests, verifies the tag matches `pyproject.toml`, builds artifacts and publishes a release when you push a `v*` tag. It derives the repository URL automatically. Once this source is committed to the GitHub repository:
+
+```sh
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+Use new version tags for subsequent releases. Test the bootstrap in a disposable Arch VM before treating it as production-ready. Local tests mock system installation commands; they do not upgrade the host or install packages as root.
