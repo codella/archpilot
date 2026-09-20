@@ -2,6 +2,8 @@
 
 These items are candidates for future work, not authorization to begin. Propose them to the user and obtain permission before proceeding.
 
+Both the items themselves and their implementation approaches are open to challenge. Propose changes to priorities, scope or technical approaches with a clear rationale; discuss alternatives with the user before acting.
+
 - [ ] Set up `https://archpilot.messybox.fyi` as the short bootstrap URL using Cloudflare.
   - Confirm the DNS, HTTPS and redirect configuration for the hostname.
   - Redirect to the published Archpilot installer on GitHub Releases.

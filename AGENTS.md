@@ -38,3 +38,5 @@ Preserve planning-only behavior: plans remain drafts and non-executable. Disk se
 ## Proposing Next Steps
 
 Consult root-level `TODO.md` when considering what to propose next. Use its items to suggest work to the user, never as authorization to act. **Never automatically start a TODO item without explicit user permission for that work.** Adding an item to the list does not grant permission to implement it.
+
+TODO items and their proposed implementation approaches are open to challenge. Question whether an item is worth doing, its priority and scope, and how it should be implemented. Explain concerns and propose alternatives to the user; do not treat the list as a fixed plan or use disagreement as permission to proceed.
