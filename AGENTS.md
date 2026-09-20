@@ -34,3 +34,7 @@ Git history is unavailable in this workspace, so no established commit conventio
 ## Safety & Configuration
 
 Preserve planning-only behavior: plans remain drafts and non-executable. Disk selection stays explicit and outside model responses. Never commit credentials, authentication caches, generated environments or exported hardware plans. Keep the SDK version pinned and regenerate installer checksums whenever release wheels change.
+
+## Proposing Next Steps
+
+Consult root-level `TODO.md` when considering what to propose next. Use its items to suggest work to the user, never as authorization to act. **Never automatically start a TODO item without explicit user permission for that work.** Adding an item to the list does not grant permission to implement it.
