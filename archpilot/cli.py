@@ -54,29 +54,48 @@ def show_plan(plan):
     say('No disks have been modified. This draft cannot be executed.')
 
 
+def sign_in(client, api_key=False):
+    from getpass import getpass
+    if api_key:
+        client.login_api_key(getpass('OpenAI API key (hidden): '))
+    else:
+        login = client.login_chatgpt_device_code()
+        say(f'Open on your phone or computer: {login.verification_url}\nCode: {login.user_code}')
+        try:
+            result = login.wait()
+        except KeyboardInterrupt:
+            login.cancel()
+            raise
+        if not result.success:
+            raise RuntimeError('Login failed. Check device-code access in ChatGPT security settings.')
+    say('Signed in.')
+
+
+def ensure_signed_in(client):
+    if client.account().account is not None:
+        return True
+    say('Welcome! Sign in to start planning with Archpilot.')
+    while True:
+        choice = input('Press Enter for ChatGPT, A for an API key, or Q to quit: ').strip().lower()
+        if choice == 'q':
+            return False
+        if choice in ('', 'a'):
+            sign_in(client, api_key=choice == 'a')
+            return True
+        say('Choose Enter, A or Q.')
+
+
 def auth(action, api_key=False):
     from .agent import new_client
-    from getpass import getpass
     with new_client() as client:
         if action == 'login':
-            if api_key:
-                client.login_api_key(getpass('OpenAI API key (hidden): '))
-            else:
-                login = client.login_chatgpt_device_code()
-                say(f'Open on your phone or computer: {login.verification_url}\nCode: {login.user_code}')
-                try:
-                    result = login.wait()
-                except KeyboardInterrupt:
-                    login.cancel()
-                    raise
-                if not result.success:
-                    raise RuntimeError('Login failed. Check device-code access in ChatGPT security settings.')
-            say('Signed in. Run archpilot chat.')
+            sign_in(client, api_key)
+            say('Run archpilot to start planning.')
         elif action == 'logout':
             client.logout()
             say('Signed out.')
         else:
-            say('Signed in.' if client.account().account is not None else 'Not signed in. Run archpilot login.')
+            say('Signed in.' if client.account().account is not None else 'Not signed in. Run archpilot to sign in and start planning.')
 
 
 def chat(demo=False, model=None):
@@ -92,9 +111,17 @@ def chat(demo=False, model=None):
     for warning in inventory['warnings']:
         say('Inventory note: ' + warning)
     show_disks(inventory)
-    say('\n' + HELP)
+    say('\nDescribe the system you want. Type /help for additional commands.')
+    if demo:
+        say(HELP)
     with ExitStack() as stack:
         agent = None
+        if not demo:
+            from .agent import PlannerAgent, new_client
+            client = stack.enter_context(new_client())
+            if not ensure_signed_in(client):
+                return
+            agent = PlannerAgent(client, inventory, model)
         while True:
             try:
                 line = input('\narch> ').strip()
@@ -138,12 +165,6 @@ def chat(demo=False, model=None):
                 elif demo:
                     say('Offline demo: use /set to choose preferences, /disk to select, then /plan. Live chat uses Codex.')
                 else:
-                    if agent is None:
-                        from .agent import PlannerAgent, new_client
-                        client = stack.enter_context(new_client())
-                        if client.account().account is None:
-                            raise RuntimeError('Not signed in. Run archpilot login first.')
-                        agent = PlannerAgent(client, inventory, model)
                     say('Thinking…')
                     message, updated = agent.reply(line, preferences)
                     preferences = updated
@@ -167,6 +188,8 @@ def main(argv=None):
             print(json.dumps(discover(), indent=2))
         else:
             chat(args.command == 'demo', args.model)
+        return 0
+    except EOFError:
         return 0
     except KeyboardInterrupt:
         say('\nStopped.')

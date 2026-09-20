@@ -4,7 +4,17 @@ A Python terminal companion for planning an Arch Linux installation from the liv
 
 **Milestone 1: hardware discovery → conversation → reviewable draft.** There is no partitioning, formatting, package installation or reboot executor. Plans are intent documents, not executable installation recipes.
 
-## Try it now
+## Start from the Arch live ISO
+
+Connect to the internet, then paste:
+
+```sh
+curl -fsSL https://github.com/codella/archpilot/releases/download/v0.1.0/install.sh | bash
+```
+
+Archpilot installs, opens, and guides you through sign-in if needed. No separate login or chat commands are required. This release is a planner; it does not format disks or install Arch Linux.
+
+## Try it locally
 
 Python 3.11+ is required. From this checkout:
 
@@ -36,15 +46,10 @@ First establish networking and correct system time, following the [Arch installa
 The pinned Python SDK installs its matching Codex runtime automatically. **No Node.js or separate global Codex install is needed.** The assistant calls that runtime through the SDK.
 
 ```sh
-.venv/bin/archpilot login
+.venv/bin/archpilot
 ```
 
-Open the displayed verification URL on a phone or another computer and enter the code. Device-code login is beta and may require enabling it in your ChatGPT security settings or workspace permissions. Then:
-
-```sh
-.venv/bin/archpilot status
-.venv/bin/archpilot chat
-```
+Archpilot checks your session and offers ChatGPT sign-in or a hidden API-key prompt if needed. Once signed in, it opens the conversation automatically. Open the displayed verification URL on a phone or another computer and enter the code. Device-code login is beta and may require enabling it in your ChatGPT security settings or workspace permissions. On later launches, run the same `archpilot` command; an existing session is reused.
 
 Use the same OS user and environment for login and chat. The SDK uses Codex's normal credential store. On the live ISO, keep this state in the live environment; don't copy it into the target installation. Sign out with `archpilot logout` (or use the `.venv/bin/` prefix).
 
@@ -68,7 +73,7 @@ arch> /plan
 
 The model can discuss choices and update four validated preferences: desktop, encryption, hostname and timezone. It cannot choose the disk through its response schema. Disk selection always uses `/disk` with an exact path. `/set` also works in live mode without an API call.
 
-`archpilot inventory` prints local discovery JSON without starting Codex. `chat --model MODEL` overrides the configured model. Discovery uses fixed `lsblk` and `lspci` argument lists, never model-generated shell text. Missing probes are reported. Model prompts contain hardware inventory and preferences; disk serials are removed from prompts, but retained in local review/export.
+`archpilot inventory` prints local discovery JSON without starting Codex. `archpilot --model MODEL` overrides the configured model. Discovery uses fixed `lsblk` and `lspci` argument lists, never model-generated shell text. Missing probes are reported. Model prompts contain hardware inventory and preferences; disk serials are removed from prompts, but retained in local review/export.
 
 ## Scope and limitations
 
@@ -98,12 +103,10 @@ The SDK version is pinned in `pyproject.toml`; it pins its own runtime dependenc
 
 ## Bootstrap from the Arch ISO
 
-Once release `v0.1.0` is published to **codella/archpilot**, connect to the internet and run:
+From the Arch live shell, connect to the internet and paste this one command:
 
 ```sh
 curl -fsSL https://github.com/codella/archpilot/releases/download/v0.1.0/install.sh | bash
-archpilot login
-archpilot chat
 ```
 
 Or download with wget and run after the download succeeds:
@@ -112,7 +115,9 @@ Or download with wget and run after the download succeeds:
 wget -O /tmp/archpilot-install.sh https://github.com/codella/archpilot/releases/download/v0.1.0/install.sh && bash /tmp/archpilot-install.sh
 ```
 
-These URLs require a published public GitHub release; local builds do not publish it. The script installs the application, then prints login/chat commands. It does not read interactive input from the download pipe or initiate installation of Arch Linux.
+These URLs require a published public GitHub release; local builds do not publish it. The script installs Archpilot and immediately opens it. If needed, Archpilot guides you through sign-in, then starts the planning conversation. Interactive input uses the terminal, not the download pipe. This does not initiate installation of Arch Linux.
+
+To install without launching, append `-s -- --no-start` after `bash`. Without an interactive terminal, the installer prints a command to launch later.
 
 The root defaults are `/opt/archpilot/releases/` and `/usr/local/bin/archpilot`. For regular users the defaults are `~/.local/share/archpilot/releases/` (respecting `XDG_DATA_HOME`) and `~/.local/bin/archpilot`; the script prints absolute commands so it also works before updating PATH. Python 3.11+ is required. Missing Python/venv prerequisites are provisioned with `pacman -Syu` **only when running as root inside `/run/archiso`**. This updates the live environment and requires sufficient RAM/overlay space. Elsewhere, install prerequisites yourself.
 
@@ -182,12 +187,10 @@ In the VM's Arch live shell, run:
 mkdir -p /run/archpilot-release
 mount -o ro /dev/disk/by-label/ARCHPILOT /run/archpilot-release
 bash /run/archpilot-release/install.sh --release-dir /run/archpilot-release
-archpilot demo
-archpilot inventory
-archpilot login
-archpilot chat
 ```
 
 The local-release path still verifies the wheel checksum and exercises the real virtual-environment install and launcher creation. It skips the GitHub download, so it does not validate the eventual public URL. Internet is still required for Python dependencies and Codex. `demo` uses fictional hardware; `inventory` and `chat` discover the VM hardware.
 
-In chat, check `/disks`, select the virtual disk's actual path, set preferences, then `/plan`. No disk is formatted. After testing, run `archpilot logout` and power off the VM. Keep only disposable virtual disks attached; no host disk passthrough is needed. On Apple Silicon, this release requires x86_64 emulation rather than an ARM guest.
+The bootstrap opens Archpilot automatically. For separate diagnostics afterward, use `archpilot demo` or `archpilot inventory`. In chat, check `/disks`, select the virtual disk's actual path, set preferences, then `/plan`. No disk is formatted. After testing, run `archpilot logout` and power off the VM. Keep only disposable virtual disks attached; no host disk passthrough is needed. On Apple Silicon, this release requires x86_64 emulation rather than an ARM guest.
+
+The default user flow is one command: `archpilot`. The explicit `login`, `status`, `logout`, `chat`, `inventory` and `demo` subcommands remain available for diagnostics and development.

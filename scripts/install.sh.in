@@ -7,6 +7,7 @@ RELEASE_BASE=@RELEASE_BASE@
 WHEEL=@WHEEL@
 WHEEL_SHA256=@WHEEL_SHA256@
 release_source=''
+auto_start=true
 prefix="${XDG_DATA_HOME:-$HOME/.local/share}/archpilot"
 bin_dir="$HOME/.local/bin"
 if [[ $(id -u) == 0 ]]; then
@@ -21,13 +22,15 @@ Archpilot bootstrap
   --prefix DIR    Installation directory (default: /opt/archpilot for root)
   --bin-dir DIR   Launcher directory (default: /usr/local/bin for root)
   --help         Show this help
-Installs Archpilot only. Run archpilot login and archpilot chat afterward.
+  --no-start     Install without opening the assistant
+Installs and opens Archpilot; it handles sign-in automatically.
 EOF
 }
 fail() { printf 'Archpilot: %s\n' "$*" >&2; exit 1; }
 while (($#)); do
     case "$1" in
         --help|-h) usage; exit 0 ;;
+        --no-start) auto_start=false; shift ;;
         --base-url|--release-dir|--prefix|--bin-dir)
             (($# >= 2)) || fail "Missing value for $1"
             case "$1" in
@@ -103,6 +106,18 @@ mv -Tf "$link_dir/archpilot" "$launcher"
 rmdir "$link_dir"
 committed=true
 printf '\nArchpilot %s installed.\n\n' "$VERSION"
-printf 'Next, run:\n  %q login\n  %q chat\n\n' "$launcher" "$launcher"
+printf 'Start Archpilot:\n  %q\n\n' "$launcher"
 printf 'Offline demo:\n  %q demo\n' "$launcher"
 printf '\nOn a standard Arch live ISO, this installation disappears after reboot.\n'
+
+# curl | bash owns stdin until the download ends. Open the controlling terminal
+# explicitly so the assistant's prompts work after a piped installation.
+if [[ $auto_start == true ]]; then
+    if ( : </dev/tty ) 2>/dev/null; then
+        cleanup
+        trap - EXIT INT TERM
+        exec "$launcher" </dev/tty >/dev/tty 2>&1
+    else
+        printf '\nNo interactive terminal available. Run the command above to start.\n'
+    fi
+fi
