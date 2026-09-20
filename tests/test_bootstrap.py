@@ -9,7 +9,7 @@ from scripts.build_release import render_installer
 
 
 class BootstrapTests(unittest.TestCase):
-    def run_installer(self, *, corrupt=False, fail_pip=False, existing=False, unrelated=False):
+    def run_installer(self, *, corrupt=False, fail_pip=False, existing=False, unrelated=False, local=False):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             fakebin = root / 'fakebin'
@@ -17,7 +17,7 @@ class BootstrapTests(unittest.TestCase):
             prefix = root / 'install'
             bindir = root / 'bin'
             bindir.mkdir()
-            wheel = root / 'fixture.whl'
+            wheel = root / 'archpilot-0.1.0-py3-none-any.whl'
             wheel.write_bytes(b'wheel fixture')
             digest = hashlib.sha256(wheel.read_bytes()).hexdigest()
             installer = root / 'install.sh'
@@ -48,7 +48,10 @@ chmod +x "$3/bin/"*
                 launcher.write_text('unrelated command')
             env = {**os.environ, 'PATH': str(fakebin) + ':' + os.environ['PATH'],
                    'FIXTURE_WHEEL': str(wheel), 'PIP_EXIT': '1' if fail_pip else '0'}
-            result = subprocess.run(['bash', str(installer), '--prefix', str(prefix), '--bin-dir', str(bindir)],
+            args = ['bash', str(installer), '--prefix', str(prefix), '--bin-dir', str(bindir)]
+            if local:
+                args.extend(['--release-dir', str(root)])
+            result = subprocess.run(args,
                                     env=env, text=True, capture_output=True, timeout=15)
             if corrupt or fail_pip or unrelated:
                 self.assertNotEqual(result.returncode, 0, result.stdout)
@@ -68,6 +71,12 @@ chmod +x "$3/bin/"*
 
     def test_success(self):
         self.run_installer()
+
+    def test_local_release(self):
+        self.run_installer(local=True)
+
+    def test_local_checksum_failure(self):
+        self.run_installer(local=True, corrupt=True)
 
     def test_checksum_failure(self):
         self.run_installer(corrupt=True)

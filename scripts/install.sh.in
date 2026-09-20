@@ -6,6 +6,7 @@ VERSION=@VERSION@
 RELEASE_BASE=@RELEASE_BASE@
 WHEEL=@WHEEL@
 WHEEL_SHA256=@WHEEL_SHA256@
+release_source=''
 prefix="${XDG_DATA_HOME:-$HOME/.local/share}/archpilot"
 bin_dir="$HOME/.local/bin"
 if [[ $(id -u) == 0 ]]; then
@@ -16,6 +17,7 @@ usage() {
     cat <<'EOF'
 Archpilot bootstrap
   --base-url URL  HTTPS directory containing the release wheel
+  --release-dir DIR  Use a local release directory (for VM testing)
   --prefix DIR    Installation directory (default: /opt/archpilot for root)
   --bin-dir DIR   Launcher directory (default: /usr/local/bin for root)
   --help         Show this help
@@ -26,10 +28,11 @@ fail() { printf 'Archpilot: %s\n' "$*" >&2; exit 1; }
 while (($#)); do
     case "$1" in
         --help|-h) usage; exit 0 ;;
-        --base-url|--prefix|--bin-dir)
+        --base-url|--release-dir|--prefix|--bin-dir)
             (($# >= 2)) || fail "Missing value for $1"
             case "$1" in
                 --base-url) RELEASE_BASE=$2 ;;
+                --release-dir) release_source=$2 ;;
                 --prefix) prefix=$2 ;;
                 --bin-dir) bin_dir=$2 ;;
             esac
@@ -37,11 +40,15 @@ while (($#)); do
         *) fail "Unknown option: $1" ;;
     esac
 done
-[[ $RELEASE_BASE == https://* ]] || fail 'A release HTTPS URL is required (--base-url).'
+if [[ -n $release_source ]]; then
+    [[ $release_source == /* && -d $release_source ]] || fail '--release-dir must be an existing absolute directory.'
+else
+    [[ $RELEASE_BASE == https://* ]] || fail 'A release HTTPS URL is required (--base-url).'
+    command -v curl >/dev/null || fail 'curl is required.'
+fi
 [[ $(uname -s) == Linux && $(uname -m) == x86_64 ]] || fail 'This release supports Linux x86_64.'
 [[ $prefix == /* && $bin_dir == /* ]] || fail 'Installation directories must be absolute paths.'
 [[ $prefix != *$'\n'* && $bin_dir != *$'\n'* ]] || fail 'Invalid installation directory.'
-command -v curl >/dev/null || fail 'curl is required.'
 command -v sha256sum >/dev/null || fail 'sha256sum is required.'
 
 # Only provision system prerequisites automatically inside the Arch live ISO.
@@ -67,10 +74,15 @@ trap cleanup EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
 
-printf 'Downloading Archpilot %s…\n' "$VERSION"
-curl --fail --silent --show-error --location --proto '=https' --proto-redir '=https' \
-    --connect-timeout 15 --max-time 180 --retry 2 \
-    "$RELEASE_BASE/$WHEEL" -o "$download_dir/$WHEEL"
+if [[ -n $release_source ]]; then
+    printf 'Using local Archpilot %s release…\n' "$VERSION"
+    cp -- "$release_source/$WHEEL" "$download_dir/$WHEEL"
+else
+    printf 'Downloading Archpilot %s…\n' "$VERSION"
+    curl --fail --silent --show-error --location --proto '=https' --proto-redir '=https' \
+        --connect-timeout 15 --max-time 180 --retry 2 \
+        "$RELEASE_BASE/$WHEEL" -o "$download_dir/$WHEEL"
+fi
 printf '%s  %s\n' "$WHEEL_SHA256" "$download_dir/$WHEEL" | sha256sum --check --status \
     || fail 'Release checksum mismatch; installation stopped.'
 python3 -m venv "$release_dir"

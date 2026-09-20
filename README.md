@@ -135,3 +135,59 @@ git push origin v0.1.0
 ```
 
 Use new version tags for subsequent releases. Test the bootstrap in a disposable Arch VM before treating it as production-ready. Local tests mock system installation commands; they do not upgrade the host or install packages as root.
+
+## Test in a VM before publishing
+
+Use a disposable **x86_64 VM with UEFI firmware**, a suggested 4 GiB RAM and a new 40 GiB virtual disk. Download the official Arch ISO from https://archlinux.org/download/ and attach it as the boot CD. Use NAT networking. The current prototype does not install a bootable OS; this tests bootstrap, login, discovery and planning.
+
+### Set up Virtual Machine Manager on an Arch Linux host
+
+Run these commands on your **host**, before booting the VM:
+
+```sh
+sudo pacman -Syu --needed qemu-desktop virt-manager libvirt edk2-ovmf dnsmasq
+sudo systemctl enable --now libvirtd.socket
+virt-manager
+```
+
+Use the QEMU/KVM system connection. Arch documents `libvirtd.socket` for this connection in the [virt-manager guide](https://wiki.archlinux.org/title/Virt-manager).
+
+### Prepare the Archpilot test disc
+
+From the project root on your host, build the release (if you have not already), then create a separate, non-bootable data disc:
+
+```sh
+.venv/bin/python scripts/build_release.py \
+  --base-url https://github.com/codella/archpilot/releases/download/v0.1.0
+.venv/bin/python -m pip install pycdlib
+.venv/bin/python scripts/build_vm_iso.py dist/v0.1.0
+```
+
+`pycdlib` is only needed to build this test disc, not to run Archpilot. These commands create local artifacts and do not publish anything to GitHub.
+
+### Create and boot the VM
+
+1. In Virtual Machine Manager, create a new VM using **Local install media** and select the [official Arch Linux ISO](https://archlinux.org/download/).
+2. Allocate **4096 MiB memory**, **2 CPUs**, and a **new 40 GiB virtual disk**. Use the **default NAT network**.
+3. Select **Customize configuration before install**.
+4. In the VM overview, select **UEFI firmware without Secure Boot**.
+5. Choose **Add Hardware → Storage**, select `dist/archpilot-test.iso`, and set its device type to **CD-ROM**. This is the second CD/DVD drive; keep the official Arch ISO attached as the boot disc.
+6. Start the VM and boot the official Arch installation medium.
+
+### Run Archpilot inside the VM
+
+In the VM's Arch live shell, run:
+
+```sh
+mkdir -p /run/archpilot-release
+mount -o ro /dev/disk/by-label/ARCHPILOT /run/archpilot-release
+bash /run/archpilot-release/install.sh --release-dir /run/archpilot-release
+archpilot demo
+archpilot inventory
+archpilot login
+archpilot chat
+```
+
+The local-release path still verifies the wheel checksum and exercises the real virtual-environment install and launcher creation. It skips the GitHub download, so it does not validate the eventual public URL. Internet is still required for Python dependencies and Codex. `demo` uses fictional hardware; `inventory` and `chat` discover the VM hardware.
+
+In chat, check `/disks`, select the virtual disk's actual path, set preferences, then `/plan`. No disk is formatted. After testing, run `archpilot logout` and power off the VM. Keep only disposable virtual disks attached; no host disk passthrough is needed. On Apple Silicon, this release requires x86_64 emulation rather than an ARM guest.
